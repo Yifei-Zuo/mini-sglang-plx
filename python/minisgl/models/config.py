@@ -32,10 +32,19 @@ class ModelConfig:
     norm_topk_prob: bool
     model_type: str
     architectures: list[str]
+    # Sliding-window size for parallax attention (None = full causal attention).
+    window_size: int | None = None
 
     @property
     def is_moe(self) -> bool:
         return "moe" in self.model_type
+
+    @property
+    def is_parallax(self) -> bool:
+        # Keyed off architectures (not model_type): parallax checkpoints keep an
+        # AutoConfig-compatible model_type (e.g. "qwen3") and declare the parallax
+        # architecture via `architectures: ["ParallaxQwen3ForCausalLM"]`.
+        return any("Parallax" in arch for arch in self.architectures)
 
     @classmethod
     def from_hf(cls, config: PretrainedConfig) -> ModelConfig:
@@ -84,4 +93,5 @@ class ModelConfig:
             norm_topk_prob=norm_topk_prob,
             model_type=model_type,
             architectures=architectures,
+            window_size=getattr(config, "window_size", None),
         )

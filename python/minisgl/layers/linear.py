@@ -88,6 +88,32 @@ class LinearQKVMerged(_LinearTPImpl):
         super().__init__(full_isize, full_osize, local_isize, local_osize, has_bias)
 
 
+class LinearQRKVMerged(_LinearTPImpl):
+    """Merged Q/R/K/V projection for parallax attention, row order [q | r | k | v].
+
+    `r` is a second query-side stream with the same shape as `q` (see
+    fla.layers.parallax), so it is sharded across TP ranks exactly like `q`.
+    """
+
+    def __init__(
+        self,
+        hidden_size: int,
+        head_dim: int,
+        num_qo_heads: int,
+        num_kv_heads: int,
+        has_bias: bool,
+    ):
+        tp_info = get_tp_info()
+
+        local_num_qo = div_even(num_qo_heads, tp_info.size)
+        local_num_kv = div_even(num_kv_heads, tp_info.size, allow_replicate=True)
+        full_isize = hidden_size
+        full_osize = (2 * num_qo_heads + 2 * num_kv_heads) * head_dim
+        local_isize = hidden_size
+        local_osize = (2 * local_num_qo + 2 * local_num_kv) * head_dim
+        super().__init__(full_isize, full_osize, local_isize, local_osize, has_bias)
+
+
 class LinearOProj(_LinearTPImpl):
     def __init__(self, input_size: int, output_size: int, has_bias: bool):
         tp_info = get_tp_info()
