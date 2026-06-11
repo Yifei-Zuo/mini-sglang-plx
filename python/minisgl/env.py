@@ -53,6 +53,7 @@ EnvFloat = partial(EnvVar[float], fn=float)
 EnvBool = partial(EnvVar[bool], fn=_TO_BOOL)
 EnvOption = partial(EnvVar[bool | None], fn=_TO_BOOL, default_value=None)
 EnvMem = partial(EnvVar[int], fn=_PARSE_MEM_BYTES)
+EnvStr = partial(EnvVar[str], fn=str)
 
 
 class EnvClassSingleton:
@@ -68,6 +69,15 @@ class EnvClassSingleton:
     FLASHINFER_USE_TENSOR_CORES = EnvOption()
     DISABLE_OVERLAP_SCHEDULING = EnvBool(False)
     PYNCCL_MAX_BUFFER_SIZE = EnvMem(1024**3)
+    # rank-0 distributed store port (concurrent engines on one node must differ)
+    DIST_PORT = EnvInt(2333)
+    # parallax decode kernel: "auto" (cute on SM90 if available, else fla),
+    # "cute" (require the CuTeDSL kernel), or "fla" (force the Triton kernel)
+    PARALLAX_DECODE_IMPL = EnvStr("auto")
+    # "max_bs:max_seqlen" (e.g. "8:4096"): pre-compile the CuTeDSL decode
+    # kernel for all (batch bucket, kv bucket) pairs up to these limits at
+    # backend init, instead of JIT-stalling on first use. Empty = no warmup.
+    PARALLAX_CUTE_WARMUP = EnvStr("")
 
     def __new__(cls):
         # single instance

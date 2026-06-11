@@ -40,6 +40,13 @@ def create_fa_backend(config: ModelConfig):
     return FlashAttentionBackend(config)
 
 
+@SUPPORTED_ATTENTION_BACKENDS.register("parallax")
+def create_parallax_backend(config: ModelConfig):
+    from .parallax import ParallaxBackend
+
+    return ParallaxBackend(config)
+
+
 def validate_attn_backend(backend: str, allow_auto: bool = True):
     if backend != "auto":
         required_backends = backend.split(",") if "," in backend else [backend]

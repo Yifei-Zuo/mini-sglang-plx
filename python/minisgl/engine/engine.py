@@ -219,7 +219,28 @@ def _adjust_config(config: EngineConfig):
     def override(attr: str, value: Any):  # this is dangerous, use with caution
         object.__setattr__(config, attr, value)
 
-    if config.attention_backend == "auto":
+    if config.model_config.is_parallax:
+        if config.attention_backend not in ("auto", "parallax"):
+            raise ValueError(
+                f"Parallax models require the 'parallax' attention backend, "
+                f"got {config.attention_backend!r}"
+            )
+        if config.attention_backend != "parallax":
+            override("attention_backend", "parallax")
+            logger.info_rank0("Parallax model: using the parallax attention backend")
+        if config.cuda_graph_max_bs != 0:
+            override("cuda_graph_max_bs", 0)
+            override("cuda_graph_bs", None)
+            logger.warning_rank0("CUDA graphs are disabled for parallax models (v1)")
+        if config.page_size != 64:
+            # page_size 64 == the CuTeDSL decode kernel's KV tile: the kernel
+            # reads the paged pool directly via TMA (no per-layer gather).
+            # The fla fallback also works at 64 (token-granular page table).
+            override("page_size", 64)
+            logger.warning_rank0("Page size is overridden to 64 for the parallax backend")
+    elif "parallax" in config.attention_backend:
+        raise ValueError("The 'parallax' attention backend requires a parallax model")
+    elif config.attention_backend == "auto":
         backend = "trtllm" if is_sm100_supported() else ("fa,fi" if is_sm90_supported() else "fi")
         override("attention_backend", backend)
         logger.info_rank0(f"Auto-selected attention backend: {config.attention_backend}")

@@ -52,4 +52,8 @@ class EngineConfig:
 
     @property
     def distributed_addr(self) -> str:
-        return "tcp://127.0.0.1:2333"
+        from minisgl.env import ENV
+
+        # MINISGL_DIST_PORT lets concurrent engines (e.g. tests/benchmarks on
+        # one node) avoid colliding on the rank-0 store port.
+        return f"tcp://127.0.0.1:{ENV.DIST_PORT.value}"

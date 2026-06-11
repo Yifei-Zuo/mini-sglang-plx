@@ -10,7 +10,7 @@ from minisgl.distributed import get_tp_info
 from minisgl.utils import cached_load_hf_config, div_ceil, download_hf_weight
 from tqdm import tqdm
 
-_SPLIT_DIM_0 = [".q_proj", ".k_proj", ".v_proj", ".gate_proj", ".up_proj"]
+_SPLIT_DIM_0 = [".q_proj", ".r_proj", ".k_proj", ".v_proj", ".gate_proj", ".up_proj"]
 _SPLIT_DIM_1 = [".o_proj", ".down_proj"]
 
 # Merge groups: individual projections -> fused projection
@@ -21,8 +21,19 @@ _MERGE_GROUPS = {
     ".gate_proj": (".gate_up_proj", ("gate", "up")),
     ".up_proj": (".gate_up_proj", ("gate", "up")),
 }
+# Parallax models carry a secondary query stream `r_proj` fused alongside q/k/v
+# (row order [q | r | k | v], matching LinearQRKVMerged).
+_PARALLAX_MERGE_GROUPS = {
+    ".q_proj": (".qrkv_proj", ("q", "r", "k", "v")),
+    ".r_proj": (".qrkv_proj", ("q", "r", "k", "v")),
+    ".k_proj": (".qrkv_proj", ("q", "r", "k", "v")),
+    ".v_proj": (".qrkv_proj", ("q", "r", "k", "v")),
+    ".gate_proj": (".gate_up_proj", ("gate", "up")),
+    ".up_proj": (".gate_up_proj", ("gate", "up")),
+}
 _SLOT_NAMES = {
     ".q_proj": "q",
+    ".r_proj": "r",
     ".k_proj": "k",
     ".v_proj": "v",
     ".gate_proj": "gate",
@@ -52,9 +63,9 @@ def _shard_tensor(key: str, value: torch.Tensor, r: int, n: int, num_kv_heads: i
         return value
 
 
-def _get_merge_info(key: str):
+def _get_merge_info(key: str, merge_groups: dict = _MERGE_GROUPS):
     """If key belongs to a merge group, return (merged_key, slot, all_slots). Else None."""
-    for suffix, (fused_suffix, slots) in _MERGE_GROUPS.items():
+    for suffix, (fused_suffix, slots) in merge_groups.items():
         if key.count(suffix):
             return key.replace(suffix, fused_suffix), _SLOT_NAMES[suffix], slots
     return None
@@ -82,6 +93,7 @@ def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, to
     files = glob.glob(f"{model_folder}/*.safetensors")
     files = [f for f in files if not f.endswith("consolidated.safetensors")] or files
     tp_info = get_tp_info()
+    merge_groups = _PARALLAX_MERGE_GROUPS if config.is_parallax else _MERGE_GROUPS
 
     # Buffer for merge groups: merged_key -> {slot: tensor}
     merge_buf: Dict[str, Dict[str, torch.Tensor]] = {}
@@ -97,7 +109,7 @@ def load_weight(model_path: str, device: torch.device) -> Iterator[Tuple[str, to
                 tensor = _shard_tensor(name, raw, tp_info.rank, tp_info.size, config.num_kv_heads)
                 del raw
 
-                if (info := _get_merge_info(name)) is None:
+                if (info := _get_merge_info(name, merge_groups)) is None:
                     out = (name, tensor)
                 else:
                     merged_key, slot, all_slots = info

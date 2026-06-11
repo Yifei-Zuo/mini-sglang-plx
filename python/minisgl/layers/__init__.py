@@ -6,11 +6,13 @@ from .linear import (
     LinearColParallelMerged,
     LinearOProj,
     LinearQKVMerged,
+    LinearQRKVMerged,
     LinearReplicated,
     LinearRowParallel,
 )
 from .moe import MoELayer
 from .norm import RMSNorm, RMSNormFused
+from .parallax_attention import ParallaxAttentionLayer
 from .rotary import get_rope, set_rope_device
 
 __all__ = [
@@ -26,6 +28,8 @@ __all__ = [
     "LinearRowParallel",
     "LinearOProj",
     "LinearQKVMerged",
+    "LinearQRKVMerged",
+    "ParallaxAttentionLayer",
     "RMSNorm",
     "RMSNormFused",
     "get_rope",
